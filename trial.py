@@ -5,9 +5,35 @@ import numpy as np
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
 
-def eyetracking(frame):    
+def find_pupil(eye_roi):
+    # Apply Gaussian blur to the eye region
+    eye_blur = cv2.GaussianBlur(eye_roi, (5, 5), 0)
+
+    # Use adaptive thresholding to highlight the pupil
+    _, threshold = cv2.threshold(eye_blur, 60, 255, cv2.THRESH_BINARY_INV)
+
+    # Find contours in the thresholded image
+    contours, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Find the contour with the maximum area (assumed to be the pupil)
+    if contours:
+        pupil_contour = max(contours, key=cv2.contourArea)
+        (x, y, w, h) = cv2.boundingRect(pupil_contour)
+
+        # Draw a rectangle around the pupil
+        cv2.rectangle(eye_roi, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+        # Draw lines to indicate the center of the pupil
+        cx, cy = x + w // 2, y + h // 2
+        # cv2.line(eye_roi, (cx, 0), (cx, eye_roi.shape[0]), (0, 255, 0), 2)
+        # cv2.line(eye_roi, (0, cy), (eye_roi.shape[1], cy), (0, 0, 255), 2)
+
+        return cx, cy
+
+    return None, None
+
+def eyedetecting(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    gray_blurred = cv2.blur(gray, (8, 8)) 
 
     # Detect faces in the frame
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
@@ -19,9 +45,6 @@ def eyetracking(frame):
         # Region of interest (ROI) for eyes within the face rectangle
         roi_gray = gray[y:y+h//2, x:x+w]
         roi_color = frame[y:y+h//2, x:x+w]
-        roi_grayblur = gray_blurred[y:y+h//2, x:x+w]
-        
-        _, threshold = cv2.threshold(roi_grayblur, 3, 255, cv2.THRESH_BINARY_INV)
 
         # Detect eyes in the ROI
         eyes = eye_cascade.detectMultiScale(roi_gray)
@@ -29,26 +52,26 @@ def eyetracking(frame):
         for (ex, ey, ew, eh) in eyes:
             # Draw a rectangle around each eye
             cv2.rectangle(roi_color, (ex, ey), (ex+ew, ey+eh), (0, 255, 0), 2)
-            # implement eyeball tracking here.
-            contours, _ = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            contours = sorted(contours, key=lambda x: cv2.contourArea(x), reverse=True)
-            for cnt in contours:
-                (x, y, w, h) = cv2.boundingRect(cnt)
-                cols = roi_color.shape[1]
-                rows = roi_color.shape[0]
-                cv2.rectangle(roi_color, (x, y), (x + w, y + h), (0, 255, 0), 1)  # Uncomment to visualize bounding rectangles
-                cv2.line(roi_color, (x + int(w/2), 0), (x + int(w/2), rows), (0, 255, 0), 2)
-                cv2.line(roi_color, (0, y + int(h/2)), (cols, y + int(h/2)), (0, 255, 0), 2)
-                break
-    
+
+            # Extract the region of interest for the eye
+            eye_roi = roi_gray[ey:ey+eh, ex:ex+ew]
+
+            # Perform pupil detection
+            pupil_x, pupil_y = find_pupil(eye_roi)
+
+            # Draw a line connecting the center of the eye to the estimated pupil position
+            if pupil_x is not None and pupil_y is not None:
+                cv2.line(roi_color, (ex + int(ew / 2), ey + int(eh / 2)), (x + pupil_x, y + pupil_y), (0, 255, 255), 2)
+
     return frame
+
 # Initialize the webcam
 cap = cv2.VideoCapture(0)
 
 while True:
     # Read a frame from the webcam
     ret, frame = cap.read()
-    frame = eyetracking(frame)
+    frame = eyedetecting(frame)
     # Display the resulting frame
     cv2.imshow('Eye Tracking', frame)
 
