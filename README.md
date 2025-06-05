@@ -1,4 +1,4 @@
-# SimpleInteractiveProjects
+# SimpleInteractiveProject
 
 Project 1: Creating an Inclusive Learning Environment: An Open-Source Game for Concentration and Focus Development
 
